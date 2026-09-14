@@ -1,8 +1,11 @@
 import time
+import threading
 from datetime import datetime, timedelta
 
 alarms = []
 next_id = 1
+alarm_thread = None
+running = False
 
 
 def add_alarm(value):
@@ -21,6 +24,9 @@ def add_alarm(value):
 
     print(f"Alarm {next_id} set for {value}")
     next_id += 1
+    
+    # Restart alarm thread when alarm is added
+    start_alarm_thread()
 
 
 def list_alarms():
@@ -63,6 +69,10 @@ def set_enabled(alarm_id, enabled):
 
     status = "enabled" if enabled else "disabled"
     print(f"Alarm {alarm_id} {status}")
+    
+    # Restart alarm thread when alarm is enabled
+    if enabled:
+        start_alarm_thread()
 
 
 def delete_alarm(alarm_id):
@@ -74,6 +84,10 @@ def delete_alarm(alarm_id):
     alarms.remove(alarm)
 
     print(f"Alarm {alarm_id} deleted")
+    
+    # Restart alarm thread if there are still enabled alarms
+    if any(alarm["enabled"] for alarm in alarms):
+        start_alarm_thread()
 
 
 def get_next_alarm():
@@ -106,14 +120,29 @@ def get_next_alarm():
     )
 
 
-def run():
-    print("Alarm clock running. Press Ctrl+C to stop.")
+def start_alarm_thread():
+    global alarm_thread, running
+    
+    # Only start a new thread if the current one is not alive
+    if alarm_thread is None or not alarm_thread.is_alive():
+        alarm_thread = threading.Thread(target=run, daemon=True)
+        alarm_thread.start()
 
-    while True:
+
+def run():
+    global running
+    running = True
+    print("\nAlarm clock running in background. Press Ctrl+C to exit.\n")
+
+    while running:
         result = get_next_alarm()
 
-        # No enabled alarms
+        # No enabled alarms - stop running
         if not result:
+            # Check if there are any alarms at all or all are disabled
+            if not alarms or all(not alarm["enabled"] for alarm in alarms):
+                running = False
+                break
             time.sleep(1)
             continue
 
@@ -151,14 +180,18 @@ list            List alarms
 enable ID       Enable alarm
 disable ID      Disable alarm
 delete ID       Delete alarm
-run             Start alarm clock
 help            Show commands
 exit            Quit
 """)
 
 
 def main():
+    global alarm_thread, running
+    
     print("Alarm Clock - type 'help' for commands")
+    
+    # Start alarm thread automatically
+    start_alarm_thread()
 
     while True:
         try:
@@ -170,15 +203,12 @@ def main():
             # Exit
             if command in ("exit", "quit"):
                 print("Goodbye.")
+                running = False
                 break
 
             # Commands without arguments
             if command == "list":
                 list_alarms()
-                continue
-
-            if command == "run":
-                run()
                 continue
 
             if command == "help":
@@ -223,6 +253,7 @@ def main():
 
         except KeyboardInterrupt:
             print("\nGoodbye.")
+            running = False
             break
 
 
