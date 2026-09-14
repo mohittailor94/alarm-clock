@@ -28,13 +28,29 @@ def list_alarms():
         print("No alarms set.")
         return
 
+    print()
+    print("+------+-------+----------+")
+    print("| ID   | Time  | Status   |")
+    print("+------+-------+----------+")
+
     for alarm in alarms:
-        status = "enabled" if alarm["enabled"] else "disabled"
-        print(f"{alarm['id']}: {alarm['time']:%H:%M} ({status})")
+        status = "Enabled" if alarm["enabled"] else "Disabled"
+
+        print(
+            f"| {alarm['id']:<4} "
+            f"| {alarm['time']:%H:%M} "
+            f"| {status:<8} |"
+        )
+
+    print("+------+-------+----------+")
+    print()
 
 
 def find_alarm(alarm_id):
-    return next((a for a in alarms if a["id"] == alarm_id), None)
+    return next(
+        (alarm for alarm in alarms if alarm["id"] == alarm_id),
+        None
+    )
 
 
 def set_enabled(alarm_id, enabled):
@@ -44,7 +60,9 @@ def set_enabled(alarm_id, enabled):
         raise ValueError(f"Alarm {alarm_id} not found")
 
     alarm["enabled"] = enabled
-    print(f"Alarm {alarm_id} {'enabled' if enabled else 'disabled'}")
+
+    status = "enabled" if enabled else "disabled"
+    print(f"Alarm {alarm_id} {status}")
 
 
 def delete_alarm(alarm_id):
@@ -54,6 +72,7 @@ def delete_alarm(alarm_id):
         raise ValueError(f"Alarm {alarm_id} not found")
 
     alarms.remove(alarm)
+
     print(f"Alarm {alarm_id} deleted")
 
 
@@ -62,17 +81,29 @@ def get_next_alarm():
     result = []
 
     for alarm in alarms:
+
         if not alarm["enabled"]:
             continue
 
-        alarm_time = datetime.combine(now.date(), alarm["time"])
+        alarm_time = datetime.combine(
+            now.date(),
+            alarm["time"]
+        )
 
+        # If today's alarm time has already passed,
+        # schedule it for tomorrow.
         if alarm_time <= now:
             alarm_time += timedelta(days=1)
 
         result.append((alarm, alarm_time))
 
-    return min(result, key=lambda x: x[1]) if result else None
+    if not result:
+        return None
+
+    return min(
+        result,
+        key=lambda x: x[1]
+    )
 
 
 def run():
@@ -81,24 +112,40 @@ def run():
     while True:
         result = get_next_alarm()
 
+        # No enabled alarms
         if not result:
-            time.sleep(2)
+            time.sleep(1)
             continue
 
         alarm, alarm_time = result
-        remaining = (alarm_time - datetime.now()).total_seconds()
 
-        if remaining > 0:
+        remaining = (
+            alarm_time - datetime.now()
+        ).total_seconds()
+
+        # Wait until alarm time.
+        # Sleep maximum 1 second so that
+        # the alarm triggers accurately.
+        if remaining > 1:
             time.sleep(min(remaining, 1))
             continue
 
-        print(f"\n*** ALARM {alarm['id']} - {alarm['time']:%H:%M} ***")
+        # Alarm triggered
+        print()
+        print(
+            f"*** ALARM {alarm['id']} - "
+            f"{alarm['time']:%H:%M} ***"
+        )
         print("\a")
+
+        # Disable alarm after triggering
         alarm["enabled"] = False
 
 
-def help():
+def show_help():
     print("""
+Available commands:
+
 add HH:MM       Add alarm
 list            List alarms
 enable ID       Enable alarm
@@ -117,9 +164,15 @@ def main():
         try:
             command = input("> ").strip()
 
+            if not command:
+                continue
+
+            # Exit
             if command in ("exit", "quit"):
+                print("Goodbye.")
                 break
 
+            # Commands without arguments
             if command == "list":
                 list_alarms()
                 continue
@@ -129,7 +182,7 @@ def main():
                 continue
 
             if command == "help":
-                help()
+                show_help()
                 continue
 
             parts = command.split()
@@ -139,21 +192,35 @@ def main():
                 continue
 
             action, value = parts
-            alarm_id = int(value) if action != "add" else None
 
+            # Add alarm
             if action == "add":
                 add_alarm(value)
-            elif action == "enable":
-                set_enabled(alarm_id, True)
-            elif action == "disable":
-                set_enabled(alarm_id, False)
-            elif action == "delete":
-                delete_alarm(alarm_id)
+
+            # Commands requiring ID
+            elif action in ("enable", "disable", "delete"):
+
+                try:
+                    alarm_id = int(value)
+                except ValueError:
+                    print("Error: ID must be a number.")
+                    continue
+
+                if action == "enable":
+                    set_enabled(alarm_id, True)
+
+                elif action == "disable":
+                    set_enabled(alarm_id, False)
+
+                elif action == "delete":
+                    delete_alarm(alarm_id)
+
             else:
-                print("Unknown command.")
+                print("Unknown command. Type 'help'.")
 
         except ValueError as e:
             print(f"Error: {e}")
+
         except KeyboardInterrupt:
             print("\nGoodbye.")
             break
